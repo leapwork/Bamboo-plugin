@@ -30,7 +30,7 @@ Leapwork is a mighty automation testing system and now it can be used for runnin
 9. Run your job and get results. Enjoy!
 
 # Screenshots
-![ScreenShot](https://github.com/Customatics/Leaptest-For-Bamboo/blob/master/src/main/resources/images/highlight1.png)
-![ScreenShot](https://github.com/Customatics/Leaptest-For-Bamboo/blob/master/src/main/resources/images/highlight2.png)
-![ScreenShot](https://github.com/Customatics/Leaptest-For-Bamboo/blob/master/src/main/resources/images/highlight3.png)
-![ScreenShot](https://github.com/Customatics/Leaptest-For-Bamboo/blob/master/src/main/resources/images/screen1.png)
+![ScreenShot](https://github.com/leapwork/Bamboo-plugin/blob/master/src/main/resources/images/image1.png)
+![ScreenShot](https://github.com/leapwork/Bamboo-plugin/blob/master/src/main/resources/images/image2.png)
+![ScreenShot](https://github.com/leapwork/Bamboo-plugin/blob/master/src/main/resources/images/image3.png)
+
