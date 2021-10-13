@@ -8,7 +8,6 @@
 [@ww.textarea labelKey="leapwork.scheduleVariables.label" name="leapworkScheduleVariables" id="leapworkScheduleVariables" required=false style="max-width: 350px; height:80px;"/]
 [@ww.checkbox labelKey="leapwork.autoReport.label" name="leapworkAutoReport" toggle=true descriptionKey="leapwork.autoReport.description" /]
 [@ww.checkbox labelKey="leapwork.writePassedFlowKeyFrames.label" name="leapworkWritePassedFlowKeyFrames" toggle="false"/]
-[@ww.textarea labelKey="leapwork.scheduleVariables.label" name="leapworkScheduleVariables" id="leapworkScheduleVariables" required=false style="max-width: 350px; height:80px;"/]
 [@ww.textarea labelKey="leapwork.schNames.label" name="leapworkSchNames" id="schNames" readonly='false' required=true style="max-width: 350px;  height:80px;" emptyOption=false/]
 [@ww.textfield labelKey="Warning: If you have identical schedule names, Please check schedules from the list or execution will result in Failure." name="leapworkSchWarning" id="schNamesWarning" readonly='true' required=false style="max-width: 1px;  height:1px;" /]
 [@ww.textarea labelKey="leapwork.schIds.label" name="leapworkSchIds" id="schIds" required=false style="max-width: 350px;" readonly=true/]
@@ -188,12 +187,13 @@ fieldArea_schIds.style.display='none';
                                                          for (j = 0; j < boxes.length; j++)
                                                          {
 
-                                                             if (existingTests[i] == boxes[j].getAttributeNode('name').value)
+                                                             if (existingTests[i] == boxes[j].getAttributeNode('name').value && !(jQuery)(boxes[j]).prop('checked'))
                                                               {
 
                                                                    if(boxes[j].disabled == false)
                                                                        (jQuery)(boxes[j]).prop('checked', 'checked');
-                                                              }
+                                                             			break;
+                                                               }
                                                          }
                                                      }
 

@@ -135,9 +135,9 @@ public final class PluginHandler {
 			ArrayList<InvalidSchedule> invalidSchedules) throws Exception {
 
 		LinkedHashMap<UUID, String> schedulesIdTitleHashMap = new LinkedHashMap<>();
-
+		ArrayList<String> tempRawScheduleList = new ArrayList<>(rawScheduleList);
 		String scheduleListUri = String.format(Messages.GET_ALL_AVAILABLE_SCHEDULES_URI, controllerApiHttpAddress);
-
+		Collections.sort(rawScheduleList);
 		try {
 			Response response = client.prepareGet(scheduleListUri).setHeader("AccessKey", accessKey).execute().get();
 
@@ -161,14 +161,19 @@ public final class PluginHandler {
 
 						if (Id.toString().contentEquals(rawSchedule)) {
 							if (!schedulesIdTitleHashMap.containsValue(Title)) {
-								if (isEnabled) {
-									schedulesIdTitleHashMap.put(Id, Title);
-									buildLogger.addBuildLogEntry(
-											String.format(Messages.SCHEDULE_DETECTED, Title, rawSchedule));
-								} else {
-									invalidSchedules.add(new InvalidSchedule(rawSchedule,
-											String.format(Messages.SCHEDULE_DISABLED, Title, Id)));
-									buildLogger.addBuildLogEntry(String.format(Messages.SCHEDULE_DISABLED, Title, Id));
+								if (tempRawScheduleList.contains(Id.toString())) {
+									tempRawScheduleList.remove(Id.toString());
+									tempRawScheduleList.remove(Title);
+									if (isEnabled) {
+										schedulesIdTitleHashMap.put(Id, Title);
+										buildLogger.addBuildLogEntry(
+												String.format(Messages.SCHEDULE_DETECTED, Title, rawSchedule));
+									} else {
+										invalidSchedules.add(new InvalidSchedule(rawSchedule,
+												String.format(Messages.SCHEDULE_DISABLED, Title, Id)));
+										buildLogger
+												.addBuildLogEntry(String.format(Messages.SCHEDULE_DISABLED, Title, Id));
+									}
 								}
 							}
 
@@ -177,13 +182,18 @@ public final class PluginHandler {
 
 						if (Title.contentEquals(rawSchedule)) {
 							if (!schedulesIdTitleHashMap.containsKey(Id)) {
-								if (isEnabled) {
-									invalidSchedules.add(new InvalidSchedule(rawSchedule,
-											String.format(Messages.SCHEDULE_IDENTICAL, Title)));
-									buildLogger.addBuildLogEntry(String.format(Messages.SCHEDULE_IDENTICAL, Title));
-								} else {
-									invalidSchedules.add(new InvalidSchedule(rawSchedule,
-											String.format(Messages.SCHEDULE_DISABLED, Title, Id)));
+								if (tempRawScheduleList.contains(Title)) {
+									tempRawScheduleList.remove(Id.toString());
+									tempRawScheduleList.remove(Title);
+									if (isEnabled) {
+										schedulesIdTitleHashMap.put(Id, Title);
+										buildLogger.addBuildLogEntry(
+												String.format(Messages.SCHEDULE_DETECTED, Title, rawSchedule));
+
+									} else {
+										invalidSchedules.add(new InvalidSchedule(rawSchedule,
+												String.format(Messages.SCHEDULE_DISABLED, Title, Id)));
+									}
 								}
 							}
 
