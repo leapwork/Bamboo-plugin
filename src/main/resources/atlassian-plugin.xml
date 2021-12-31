@@ -1,0 +1,31 @@
+<atlassian-plugin key="${atlassian.plugin.key}" name="${project.name}" plugins-version="2">
+    <plugin-info>
+        <description>${project.description}</description>
+        <version>${project.version}</version>
+        <vendor name="${project.organization.name}" url="${project.organization.url}" />
+        <param name="plugin-icon">images/pluginIcon.png</param>
+        <param name="plugin-logo">images/pluginLogo.png</param>
+		<param name="vendor-logo">images/vendorLogo.png</param>
+        <param name="vendor-icon">images/vendorIcon.png</param>
+    </plugin-info>
+
+    <!-- add our i18n resource -->
+    <resource type="i18n" name="i18n" location="leapwork-integration-for-bamboo"/>
+    
+    <!-- add our web resources -->
+    <taskType key="LeapworkBambooBridgeTask" name="Leapwork"
+				  class="com.leapwork.leapwork_integration_for_bamboo.impl.LeapworkBambooBridgeTask">>
+       <description>Choose Schedules, Run and Get result
+        </description>
+        <category name="builder" />
+        <category name="test" />
+        <configuration
+                class="com.leapwork.leapwork_integration_for_bamboo.impl.LeapworkBambooBridgeTaskConfigurator" />
+        <resource type="freemarker" name="edit"
+                  location="editLeapworkBambooBridgeTask.ftl" />
+        <resource type="freemarker" name="view"
+                  location="viewLeapworkBambooBridgeTask.ftl" />
+        <resource type="download" name="icon" location="images/vendorLogo.png" />
+    </taskType>
+
+</atlassian-plugin>
