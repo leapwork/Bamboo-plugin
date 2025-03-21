@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
 
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.leapwork</groupId>
@@ -31,6 +30,23 @@
         <maven.compiler.target>1.8</maven.compiler.target>
     </properties>
 
+    <repositories>
+        <repository>
+            <id>atlassian-public</id>
+            <url>https://maven.atlassian.com/repository/public</url>
+            <snapshots>
+                <enabled>true</enabled>
+            </snapshots>
+        </repository>
+    </repositories>
+
+    <pluginRepositories>
+        <pluginRepository>
+            <id>atlassian-public</id>
+            <url>https://maven.atlassian.com/repository/public</url>
+        </pluginRepository>
+    </pluginRepositories>
+
     <dependencies>
         <dependency>
             <groupId>com.atlassian.bamboo</groupId>
@@ -44,7 +60,7 @@
             <artifactId>atlassian-spring-scanner-annotation</artifactId>
             <version>${atlassian.spring.scanner.version}</version>
             <scope>provided</scope>
-        </dependency>     
+        </dependency>
 
         <dependency>
             <groupId>javax.inject</groupId>
@@ -64,7 +80,7 @@
             <groupId>com.atlassian.sal</groupId>
             <artifactId>sal-api</artifactId>
             <version>3.0.8</version>
-            <scope>provided</scope> <!-- Uses the application's SAL instead of bundling it into the plugin. -->
+            <scope>provided</scope>            <!-- Uses the application's SAL instead of bundling it into the plugin. -->
         </dependency>
 
         <!-- WIRED TEST RUNNER DEPENDENCIES -->
@@ -87,10 +103,37 @@
             <scope>provided</scope>
         </dependency>
         <dependency>
-            <groupId>com.ning</groupId>
+            <groupId>org.asynchttpclient</groupId>
             <artifactId>async-http-client</artifactId>
-            <version>1.4.0</version>
-            <scope>compile</scope>
+            <version>3.0.1</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-api</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.ning</groupId>
+                    <artifactId>async-http-client</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>io.netty</groupId>
+                    <artifactId>netty-common</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>io.netty</groupId>
+                    <artifactId>netty-handler</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-common</artifactId>
+            <version>4.1.119.Final</version>
+        </dependency>
+        <dependency>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-handler</artifactId>
+            <version>4.1.119.Final</version>
         </dependency>
         <dependency>
             <groupId>com.atlassian.bamboo.plugins.testresultparser</groupId>
@@ -103,7 +146,7 @@
 
     <build>
         <plugins>
-             <plugin>
+            <plugin>
                 <groupId>com.atlassian.maven.plugins</groupId>
                 <artifactId>bamboo-maven-plugin</artifactId>
                 <version>${amps.version}</version>
@@ -117,20 +160,19 @@
                     <!-- See here for an explanation of default instructions: -->
                     <!-- https://developer.atlassian.com/docs/advanced-topics/configuration-of-instructions-in-atlassian-plugins -->
                     <instructions>
-                        <Atlassian-Plugin-Key>${atlassian.plugin.key}</Atlassian-Plugin-Key>                     
+                        <Atlassian-Plugin-Key>${atlassian.plugin.key}</Atlassian-Plugin-Key>
+
+                        <Export-Package>*</Export-Package>
 
                         <!-- Add package import here -->
-                        <Import-Package>
-                            org.springframework.osgi.*;resolution:="optional",
-                            com.ning.http.client.*;resolution:="optional",
-                            com.google.code.gson.*;resolution:="optional",
-                            com.google.protobuf.*;resolution:="optional",
-                            org.glassfish.grizzly.*;resolution:="optional",
-                            org.osgi.service.log;resolution:="optional",
-                            com.sun.org.apache.xerces.internal.dom;resolution:="optional",
-                            com.atlassian.util.concurrent.NotNull;resolution:="optional",
-                            org.eclipse.gemini.blueprint.*;resolution:="optional",
-                            *
+                        <Import-Package>  
+                            com.google.*;resolution:="optional", 
+                            com.sun.org.apache.*;resolution:="optional", 
+                            com.atlassian.*;resolution:="optional", 
+                            com.leapwork.leapwork_integration_for_bamboo.*;resolution:="optional", 
+                            javax.*;resolution:="optional", 
+                            org.*;resolution:="optional", 
+                            *;resolution="optional"
                         </Import-Package>
 
                         <!-- Ensure plugin is spring powered -->
