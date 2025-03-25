@@ -5,7 +5,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.leapwork</groupId>
     <artifactId>leapwork-integration-for-bamboo</artifactId>
-    <version>5.0.1-SNAPSHOT</version>
+    <version>5.0.2-SNAPSHOT</version>
 
     <organization>
         <name>Leapwork</name>
