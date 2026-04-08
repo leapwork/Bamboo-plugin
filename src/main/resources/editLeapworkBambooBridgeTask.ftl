@@ -1,6 +1,6 @@
-
 [@ww.textfield labelKey="leapwork.hostname.label" name="leapworkHostname" id="leapworkHostname" required=true style="max-width: 350px; "/]
 [@ww.textfield labelKey="leapwork.port.label" name="leapworkPort" id="leapworkPort" required=true style="max-width: 80px; "/]
+[@ww.checkbox labelKey="leapwork.https.label" name="leapworkHttps" toggle="true" descriptionKey="leapwork.https.description" /]
 [@ww.textfield labelKey="leapwork.accessKey.label" name="leapworkAccessKey" id="leapworkAccessKey" required=true style="max-width: 350px; "/]
 [@ww.textfield labelKey="leapwork.delay.label" name="leapworkDelay" id="leapworkDelay" required=false style="width: 80px;"/]
 [@ww.select cssClass="builderSelectWidget" labelKey='leapwork.doneStatusAs.label' name='leapworkDoneStatusAs' list="statuses" id="leapworkDoneStatusAs" emptyOption=false style="width: 80px;"/]
@@ -91,6 +91,7 @@ fieldArea_schIds.style.display='none';
          function GetSch() {
                    const leapworkHostname = document.getElementById("leapworkHostname").value;
                    const leapworkPort = document.getElementById("leapworkPort").value;
+                   const leapworkConnectionType = document.getElementById("leapworkHttps").checked ? "https" : "http";
 
                    if(!leapworkHostname || !leapworkPort)
                    {
@@ -98,7 +99,7 @@ fieldArea_schIds.style.display='none';
                    }
                    else
                    {
-                       const address = "http://" + leapworkHostname + ":" + leapworkPort;
+                       const address = leapworkConnectionType + "://" + leapworkHostname + ":" + leapworkPort;
                        const accessKey = document.getElementById("leapworkAccessKey").value;
 
                        if(document.getElementById('LeapworkContainer').innerHTML == "")
@@ -112,7 +113,6 @@ fieldArea_schIds.style.display='none';
                                success: function(json)
                                {
                                      const container = document.getElementById("LeapworkContainer");
-
 
                                      (jQuery)(document).click(function (event) {
                                          if ((jQuery)(event.target).closest('#LeapworkContainer').length == 0 && (jQuery)(event.target).attr('id') != 'mainButton') {

@@ -8,10 +8,11 @@ import com.atlassian.bamboo.build.test.junit.JunitTestReportCollector;
 import com.atlassian.bamboo.task.*;
 import com.atlassian.plugin.spring.scanner.annotation.component.Scanned;
 import com.atlassian.plugin.spring.scanner.annotation.imports.ComponentImport;
-import com.ning.http.client.AsyncHttpClient;
-import com.sun.javafx.scene.layout.region.Margins;
+import org.asynchttpclient.AsyncHttpClient;
+import org.asynchttpclient.Dsl;
 import org.springframework.beans.factory.annotation.Autowired;
 import java.io.File;
+import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -27,10 +28,9 @@ public class LeapworkBambooBridgeTask implements TaskType {
 	private final TestCollationService testCollationService;
 
 	@Autowired
-    public LeapworkBambooBridgeTask(@ComponentImport TestCollationService testCollationService)
-    {
-        this.testCollationService = testCollationService;
-    }
+	public LeapworkBambooBridgeTask(@ComponentImport TestCollationService testCollationService) {
+		this.testCollationService = testCollationService;
+	}
 
 	@Override
 	public TaskResult execute(final TaskContext taskContext) throws TaskException {
@@ -40,6 +40,7 @@ public class LeapworkBambooBridgeTask implements TaskType {
 
 		// get fields value
 		final String leapworkHostname = taskContext.getConfigurationMap().get("leapworkHostname");
+		final String leapworkHttps = taskContext.getConfigurationMap().get("leapworkHttps");
 		final String leapworkPort = taskContext.getConfigurationMap().get("leapworkPort");
 		final String leapworkAccessKey = taskContext.getConfigurationMap().get("leapworkAccessKey");
 		final String leapworkDelay = taskContext.getConfigurationMap().get("leapworkDelay");
@@ -59,12 +60,14 @@ public class LeapworkBambooBridgeTask implements TaskType {
 		final LinkedHashMap<String, Integer> repeatedNameMapCounter = new LinkedHashMap<>();
 
 		ArrayList<String> rawScheduleList = pluginHandler.getRawScheduleList(leapworkSchIds, leapworkSchNames);
-		printPluginInputs(leapworkHostname, leapworkPort, leapworkDelay, leapworkDoneStatusAs, leapworkReport,
+		printPluginInputs(leapworkHostname, leapworkHttps, leapworkPort, leapworkDelay, leapworkDoneStatusAs,
+				leapworkReport,
 				leapworkSchNames, leapworkSchIds, leapworkScheduleVariables,
 				String.valueOf(leapworkWritePassedFlowKeyFrames), buildLogger);
 
-		String controllerApiHttpAddress = pluginHandler.getControllerApiHttpAdderess(leapworkHostname, leapworkPort,
-				buildLogger);
+		boolean isHttpsEnabled = Utils.defaultBooleanIfNull(leapworkHttps, false);
+		String controllerApiHttpAddress = pluginHandler.getControllerApiHttpAdderess(leapworkHostname, isHttpsEnabled,
+				leapworkPort, buildLogger);
 
 		int timeDelay = pluginHandler.getTimeDelay(leapworkDelay, buildLogger);
 		boolean isAutoReportEnabled = Utils.defaultBooleanIfNull(leapworkAutoReport, false);
@@ -75,7 +78,7 @@ public class LeapworkBambooBridgeTask implements TaskType {
 		String scheduleVariablesRequestPart = pluginHandler.getScheduleVariablesRequestPart(leapworkScheduleVariables,
 				buildLogger);
 
-		AsyncHttpClient mainClient = new AsyncHttpClient();
+		AsyncHttpClient mainClient = Dsl.asyncHttpClient();
 		try {
 			// Get schedule titles (or/and ids in case of pipeline)
 			LinkedHashMap<UUID, String> schedulesIdTitleHashMap = pluginHandler.getSchedulesIdTitleHashMap(mainClient,
@@ -183,7 +186,11 @@ public class LeapworkBambooBridgeTask implements TaskType {
 			buildLogger.addErrorLogEntry("FAILURE");
 			result = taskResultBuilder.failedWithError().build();
 		} finally {
-			mainClient.close();
+			try {
+				mainClient.close();
+			} catch (IOException closeException) {
+				buildLogger.addErrorLogEntry("Error closing HTTP client: " + closeException.getMessage());
+			}
 			return result;
 		}
 	}
@@ -195,7 +202,7 @@ public class LeapworkBambooBridgeTask implements TaskType {
 		List<UUID> runItemsId = new ArrayList<>();
 		Object waiter = new Object();
 		// get statuses
-		AsyncHttpClient client = new AsyncHttpClient();
+		AsyncHttpClient client = Dsl.asyncHttpClient();
 		try {
 			boolean isStillRunning = true;
 
@@ -218,50 +225,50 @@ public class LeapworkBambooBridgeTask implements TaskType {
 
 					resultRun.addTime(runItem.getElapsedTime());
 					switch (status) {
-					case "NoStatus":
-					case "Initializing":
-					case "Connecting":
-					case "Connected":
-					case "Running":
-					case "IsProcessing":
-						iter.remove();
-						break;
-					case "Passed":
+						case "NoStatus":
+						case "Initializing":
+						case "Connecting":
+						case "Connected":
+						case "Running":
+						case "IsProcessing":
+							iter.remove();
+							break;
+						case "Passed":
 
-						runItem.setCaseName(
-								pluginHandler.correctRepeatedTitles(repeatedNameMapCounter, runItem.getCaseName()));
-						resultRun.incPassed();
-						resultRun.runItems.add(runItem);
-						resultRun.incTotal();
-						break;
-					case "Failed":
-
-						runItem.setCaseName(
-								pluginHandler.correctRepeatedTitles(repeatedNameMapCounter, runItem.getCaseName()));
-						resultRun.incFailed();
-						resultRun.runItems.add(runItem);
-						resultRun.incTotal();
-						break;
-					case "Error":
-					case "Inconclusive":
-					case "Timeout":
-					case "Cancelled":
-						runItem.setCaseName(
-								pluginHandler.correctRepeatedTitles(repeatedNameMapCounter, runItem.getCaseName()));
-						resultRun.incErrors();
-						resultRun.runItems.add(runItem);
-						resultRun.incTotal();
-						break;
-					case "Done":
-						runItem.setCaseName(
-								pluginHandler.correctRepeatedTitles(repeatedNameMapCounter, runItem.getCaseName()));
-						resultRun.runItems.add(runItem);
-						if (isDoneStatusAsSuccess)
+							runItem.setCaseName(
+									pluginHandler.correctRepeatedTitles(repeatedNameMapCounter, runItem.getCaseName()));
 							resultRun.incPassed();
-						else
+							resultRun.runItems.add(runItem);
+							resultRun.incTotal();
+							break;
+						case "Failed":
+
+							runItem.setCaseName(
+									pluginHandler.correctRepeatedTitles(repeatedNameMapCounter, runItem.getCaseName()));
 							resultRun.incFailed();
-						resultRun.incTotal();
-						break;
+							resultRun.runItems.add(runItem);
+							resultRun.incTotal();
+							break;
+						case "Error":
+						case "Inconclusive":
+						case "Timeout":
+						case "Cancelled":
+							runItem.setCaseName(
+									pluginHandler.correctRepeatedTitles(repeatedNameMapCounter, runItem.getCaseName()));
+							resultRun.incErrors();
+							resultRun.runItems.add(runItem);
+							resultRun.incTotal();
+							break;
+						case "Done":
+							runItem.setCaseName(
+									pluginHandler.correctRepeatedTitles(repeatedNameMapCounter, runItem.getCaseName()));
+							resultRun.runItems.add(runItem);
+							if (isDoneStatusAsSuccess)
+								resultRun.incPassed();
+							else
+								resultRun.incFailed();
+							resultRun.incTotal();
+							break;
 
 					}
 
@@ -302,11 +309,18 @@ public class LeapworkBambooBridgeTask implements TaskType {
 			resultRun.incErrors();
 			resultRun.runItems.add(invalidItem);
 		} finally {
-			client.close();
+			if (client != null) {
+				try {
+					client.close();
+				} catch (IOException e) {
+					buildLogger.addErrorLogEntry("Error while closing client: " + e.getMessage());
+				}
+			}
 		}
 	}
 
-	private void printPluginInputs(String leapworkHostname, String leapworkPort, String leapworkDelay,
+	private void printPluginInputs(String leapworkHostname, String leapworkHttps, String leapworkPort,
+			String leapworkDelay,
 			String leapworkDoneStatusAs, String leapworkReport, String leapworkSchNames, String leapworkSchIds,
 			String leapworkScheduleVariables, String leapworkWritePassedFlowKeyFrames, final BuildLogger buildLogger) {
 		String[] Names = leapworkSchNames.split(PluginHandler.scheduleSeparatorRegex);
@@ -315,6 +329,7 @@ public class LeapworkBambooBridgeTask implements TaskType {
 		buildLogger.addBuildLogEntry(Messages.INPUT_VALUES_MESSAGE);
 		buildLogger.addBuildLogEntry(Messages.CASE_CONSOLE_LOG_SEPARATOR);
 		buildLogger.addBuildLogEntry(String.format(Messages.INPUT_HOSTNAME_VALUE, leapworkHostname));
+		buildLogger.addBuildLogEntry(String.format(Messages.INPUT_HTTPS, leapworkHttps));
 		buildLogger.addBuildLogEntry(String.format(Messages.INPUT_PORT_VALUE, leapworkPort));
 		buildLogger.addBuildLogEntry(String.format(Messages.INPUT_REPORT_VALUE, leapworkReport));
 		buildLogger.addBuildLogEntry(Messages.INPUT_SCHEDULE_NAMES_VALUE);
@@ -327,7 +342,5 @@ public class LeapworkBambooBridgeTask implements TaskType {
 		buildLogger.addBuildLogEntry(String.format(Messages.INPUT_DONE_VALUE, leapworkDoneStatusAs));
 		buildLogger.addBuildLogEntry(String.format(Messages.INPUT_WRITE_PASSED, leapworkWritePassedFlowKeyFrames));
 		buildLogger.addBuildLogEntry(String.format(Messages.INPUT_VARIABLES, leapworkScheduleVariables));
-
 	}
-
 }

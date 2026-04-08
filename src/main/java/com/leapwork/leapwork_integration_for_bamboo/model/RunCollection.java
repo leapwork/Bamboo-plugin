@@ -1,8 +1,7 @@
 package com.leapwork.leapwork_integration_for_bamboo.model;
 
-
 import javax.xml.bind.annotation.*;
-;import java.util.ArrayList;
+import java.util.ArrayList;
 
 @XmlRootElement(name = "testsuites")
 @XmlAccessorType(XmlAccessType.NONE)

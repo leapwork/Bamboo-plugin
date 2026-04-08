@@ -1,7 +1,6 @@
 package com.leapwork.leapwork_integration_for_bamboo.impl;
 
 import com.google.gson.JsonElement;
-
 import java.util.Map;
 import java.util.UUID;
 

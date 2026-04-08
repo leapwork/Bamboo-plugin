@@ -8,9 +8,9 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import com.ning.http.client.AsyncHttpClient;
-import com.ning.http.client.Response;
-
+import org.asynchttpclient.AsyncHttpClient;
+import org.asynchttpclient.Response;
+import org.asynchttpclient.Dsl;
 import javax.xml.bind.JAXBContext;
 import javax.xml.bind.JAXBException;
 import javax.xml.bind.Marshaller;
@@ -108,23 +108,41 @@ public final class PluginHandler {
 		return doneStatusAs.contentEquals("Success");
 	}
 
-	public String getControllerApiHttpAdderess(String hostname, String rawPort, final BuildLogger buildLogger) {
+	public String getControllerApiHttpAdderess(String hostname, boolean isHttpsEnabled, String rawPort,
+			final BuildLogger buildLogger) {
 		StringBuilder stringBuilder = new StringBuilder();
-		int port = getPortNumber(rawPort, buildLogger);
-		stringBuilder.append("http://").append(hostname).append(":").append(port);
+		int port = getPortNumber(rawPort, isHttpsEnabled, buildLogger);
+		if (isHttpsEnabled) {
+			stringBuilder.append("https://").append(hostname).append(":").append(port);
+		} else {
+			stringBuilder.append("http://").append(hostname).append(":").append(port);
+		}
+
 		return stringBuilder.toString();
 	}
 
-	private int getPortNumber(String rawPortStr, final BuildLogger buildLogger) {
-		int defaultPortNumber = 9001;
+	private int getPortNumber(String rawPortStr, boolean isHttpsEnabled, final BuildLogger buildLogger) {
+		int defaultPortNumber;
+		int defaultHttpPortNumber = 9001;
+		int defaultHttpsPortNumber = 9002;
 		try {
 			if (!rawPortStr.isEmpty() || !"".equals(rawPortStr))
 				return Integer.parseInt(rawPortStr);
 			else {
+				if (isHttpsEnabled) {
+					defaultPortNumber = defaultHttpsPortNumber;
+				} else {
+					defaultPortNumber = defaultHttpPortNumber;
+				}
 				buildLogger.addErrorLogEntry(String.format(Messages.PORT_NUMBER_IS_INVALID, defaultPortNumber));
 				return defaultPortNumber;
 			}
 		} catch (Exception e) {
+			if (isHttpsEnabled) {
+				defaultPortNumber = defaultHttpsPortNumber;
+			} else {
+				defaultPortNumber = defaultHttpPortNumber;
+			}
 			buildLogger.addErrorLogEntry(String.format(Messages.PORT_NUMBER_IS_INVALID, defaultPortNumber));
 			return defaultPortNumber;
 		}
@@ -142,87 +160,91 @@ public final class PluginHandler {
 			Response response = client.prepareGet(scheduleListUri).setHeader("AccessKey", accessKey).execute().get();
 
 			switch (response.getStatusCode()) {
-			case 200:
-				JsonParser parser = new JsonParser();
-				JsonArray jsonScheduleList = parser.parse(response.getResponseBody()).getAsJsonArray();
+				case 200:
+					JsonParser parser = new JsonParser();
+					JsonArray jsonScheduleList = parser.parse(response.getResponseBody()).getAsJsonArray();
 
-				for (String rawSchedule : rawScheduleList) {
-					boolean successfullyMapped = false;
-					for (JsonElement jsonScheduleElement : jsonScheduleList) {
-						JsonObject jsonSchedule = jsonScheduleElement.getAsJsonObject();
+					for (String rawSchedule : rawScheduleList) {
+						boolean successfullyMapped = false;
+						for (JsonElement jsonScheduleElement : jsonScheduleList) {
+							JsonObject jsonSchedule = jsonScheduleElement.getAsJsonObject();
 
-						if (jsonSchedule.get("Type").getAsString().contentEquals("TemporaryScheduleInfo"))
-							continue;
+							if (jsonSchedule.get("Type").getAsString().contentEquals("TemporaryScheduleInfo"))
+								continue;
 
-						UUID Id = Utils.defaultUuidIfNull(jsonSchedule.get("Id"), UUID.randomUUID());
-						String Title = Utils.defaultStringIfNull(jsonSchedule.get("Title"), "null Title");
+							UUID Id = Utils.defaultUuidIfNull(jsonSchedule.get("Id"), UUID.randomUUID());
+							String Title = Utils.defaultStringIfNull(jsonSchedule.get("Title"), "null Title");
 
-						boolean isEnabled = Utils.defaultBooleanIfNull(jsonSchedule.get("IsEnabled"), false);
+							boolean isEnabled = Utils.defaultBooleanIfNull(jsonSchedule.get("IsEnabled"), false);
 
-						if (Id.toString().contentEquals(rawSchedule)) {
-							if (!schedulesIdTitleHashMap.containsValue(Title)) {
-								if (tempRawScheduleList.contains(Id.toString())) {
-									tempRawScheduleList.remove(Id.toString());
-									tempRawScheduleList.remove(Title);
-									if (isEnabled) {
-										schedulesIdTitleHashMap.put(Id, Title);
-										buildLogger.addBuildLogEntry(
-												String.format(Messages.SCHEDULE_DETECTED, Title, rawSchedule));
-									} else {
-										invalidSchedules.add(new InvalidSchedule(rawSchedule,
-												String.format(Messages.SCHEDULE_DISABLED, Title, Id)));
-										buildLogger
-												.addBuildLogEntry(String.format(Messages.SCHEDULE_DISABLED, Title, Id));
+							if (Id.toString().contentEquals(rawSchedule)) {
+								if (!schedulesIdTitleHashMap.containsValue(Title)) {
+									if (tempRawScheduleList.contains(Id.toString())) {
+										tempRawScheduleList.remove(Id.toString());
+										tempRawScheduleList.remove(Title);
+										if (isEnabled) {
+											schedulesIdTitleHashMap.put(Id, Title);
+											buildLogger.addBuildLogEntry(
+													String.format(Messages.SCHEDULE_DETECTED, Title, rawSchedule));
+										} else {
+											invalidSchedules.add(new InvalidSchedule(rawSchedule,
+													String.format(Messages.SCHEDULE_DISABLED, Title, Id)));
+											buildLogger
+													.addBuildLogEntry(
+															String.format(Messages.SCHEDULE_DISABLED, Title, Id));
+										}
 									}
 								}
+
+								successfullyMapped = true;
 							}
 
-							successfullyMapped = true;
-						}
+							if (Title.contentEquals(rawSchedule)) {
+								if (!schedulesIdTitleHashMap.containsKey(Id)) {
+									if (tempRawScheduleList.contains(Title)) {
+										tempRawScheduleList.remove(Id.toString());
+										tempRawScheduleList.remove(Title);
+										if (isEnabled) {
+											schedulesIdTitleHashMap.put(Id, Title);
+											buildLogger.addBuildLogEntry(
+													String.format(Messages.SCHEDULE_DETECTED, Title, rawSchedule));
 
-						if (Title.contentEquals(rawSchedule)) {
-							if (!schedulesIdTitleHashMap.containsKey(Id)) {
-								if (tempRawScheduleList.contains(Title)) {
-									tempRawScheduleList.remove(Id.toString());
-									tempRawScheduleList.remove(Title);
-									if (isEnabled) {
-										schedulesIdTitleHashMap.put(Id, Title);
-										buildLogger.addBuildLogEntry(
-												String.format(Messages.SCHEDULE_DETECTED, Title, rawSchedule));
-
-									} else {
-										invalidSchedules.add(new InvalidSchedule(rawSchedule,
-												String.format(Messages.SCHEDULE_DISABLED, Title, Id)));
+										} else {
+											invalidSchedules.add(new InvalidSchedule(rawSchedule,
+													String.format(Messages.SCHEDULE_DISABLED, Title, Id)));
+										}
 									}
 								}
+
+								successfullyMapped = true;
 							}
 
-							successfullyMapped = true;
 						}
 
+						if (!successfullyMapped)
+							invalidSchedules.add(new InvalidSchedule(rawSchedule, Messages.NO_SUCH_SCHEDULE));
 					}
+					break;
 
-					if (!successfullyMapped)
-						invalidSchedules.add(new InvalidSchedule(rawSchedule, Messages.NO_SUCH_SCHEDULE));
-				}
-				break;
+				case 401:
+					StringBuilder errorMessage401 = new StringBuilder(
+							String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(),
+									response.getStatusText()));
+					appendLine(errorMessage401, Messages.INVALID_ACCESS_KEY);
+					OnFailedToGetScheduleTitleIdMap(null, errorMessage401.toString(), buildLogger);
 
-			case 401:
-				StringBuilder errorMessage401 = new StringBuilder(
-						String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
-				appendLine(errorMessage401, Messages.INVALID_ACCESS_KEY);
-				OnFailedToGetScheduleTitleIdMap(null, errorMessage401.toString(), buildLogger);
+				case 500:
+					StringBuilder errorMessage500 = new StringBuilder(
+							String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(),
+									response.getStatusText()));
+					appendLine(errorMessage500, Messages.CONTROLLER_RESPONDED_WITH_ERRORS);
+					OnFailedToGetScheduleTitleIdMap(null, errorMessage500.toString(), buildLogger);
 
-			case 500:
-				StringBuilder errorMessage500 = new StringBuilder(
-						String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
-				appendLine(errorMessage500, Messages.CONTROLLER_RESPONDED_WITH_ERRORS);
-				OnFailedToGetScheduleTitleIdMap(null, errorMessage500.toString(), buildLogger);
-
-			default:
-				StringBuilder errorMessage = new StringBuilder(
-						String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
-				OnFailedToGetScheduleTitleIdMap(null, errorMessage.toString(), buildLogger);
+				default:
+					StringBuilder errorMessage = new StringBuilder(
+							String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(),
+									response.getStatusText()));
+					OnFailedToGetScheduleTitleIdMap(null, errorMessage.toString(), buildLogger);
 
 			}
 		} catch (ConnectException | UnknownHostException e) {
@@ -269,61 +291,66 @@ public final class PluginHandler {
 			Response response = client.preparePut(uri).setHeader("AccessKey", accessKey).setBody("").execute().get();
 
 			switch (response.getStatusCode()) {
-			case 200:
-				String successMessage = String.format(Messages.SCHEDULE_RUN_SUCCESS, scheduleTitle, scheduleId);
-				buildLogger.addBuildLogEntry(Messages.SCHEDULE_CONSOLE_LOG_SEPARATOR);
-				buildLogger.addBuildLogEntry(successMessage);
-				JsonParser parser = new JsonParser();
-				JsonObject jsonRunObject = parser.parse(response.getResponseBody()).getAsJsonObject();
-				JsonElement jsonRunId = jsonRunObject.get("RunId");
-				String runIdStr = Utils.defaultStringIfNull(jsonRunId);
-				UUID runId = UUID.fromString(runIdStr);
-				return runId;
+				case 200:
+					String successMessage = String.format(Messages.SCHEDULE_RUN_SUCCESS, scheduleTitle, scheduleId);
+					buildLogger.addBuildLogEntry(Messages.SCHEDULE_CONSOLE_LOG_SEPARATOR);
+					buildLogger.addBuildLogEntry(successMessage);
+					JsonParser parser = new JsonParser();
+					JsonObject jsonRunObject = parser.parse(response.getResponseBody()).getAsJsonObject();
+					JsonElement jsonRunId = jsonRunObject.get("RunId");
+					String runIdStr = Utils.defaultStringIfNull(jsonRunId);
+					UUID runId = UUID.fromString(runIdStr);
+					return runId;
 
-			case 400:
-				StringBuilder errorMessage400 = new StringBuilder(
-						String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
-				appendLine(errorMessage400, Messages.INVALID_VARIABLE_KEY_NAME);
-				return OnScheduleRunFailure(errorMessage400, run, scheduleId, buildLogger);
+				case 400:
+					StringBuilder errorMessage400 = new StringBuilder(
+							String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(),
+									response.getStatusText()));
+					appendLine(errorMessage400, Messages.INVALID_VARIABLE_KEY_NAME);
+					return OnScheduleRunFailure(errorMessage400, run, scheduleId, buildLogger);
 
-			case 401:
-				StringBuilder errorMessage401 = new StringBuilder(
-						String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
-				appendLine(errorMessage401, Messages.INVALID_ACCESS_KEY);
-				return OnScheduleRunFailure(errorMessage401, run, scheduleId, buildLogger);
+				case 401:
+					StringBuilder errorMessage401 = new StringBuilder(
+							String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(),
+									response.getStatusText()));
+					appendLine(errorMessage401, Messages.INVALID_ACCESS_KEY);
+					return OnScheduleRunFailure(errorMessage401, run, scheduleId, buildLogger);
 
-			case 404:
-				StringBuilder errorMessage404 = new StringBuilder(
-						String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
-				appendLine(errorMessage404,
-						String.format(Messages.NO_SUCH_SCHEDULE_WAS_FOUND, scheduleTitle, scheduleId));
-				return OnScheduleRunFailure(errorMessage404, run, scheduleId, buildLogger);
+				case 404:
+					StringBuilder errorMessage404 = new StringBuilder(
+							String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(),
+									response.getStatusText()));
+					appendLine(errorMessage404,
+							String.format(Messages.NO_SUCH_SCHEDULE_WAS_FOUND, scheduleTitle, scheduleId));
+					return OnScheduleRunFailure(errorMessage404, run, scheduleId, buildLogger);
 
-			case 446:
-				StringBuilder errorMessage446 = new StringBuilder(
-						String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
-				appendLine(errorMessage446, Messages.NO_DISK_SPACE);
-				return OnScheduleRunFailure(errorMessage446, run, scheduleId, buildLogger);
+				case 446:
+					StringBuilder errorMessage446 = new StringBuilder(
+							String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(),
+									response.getStatusText()));
+					appendLine(errorMessage446, Messages.NO_DISK_SPACE);
+					return OnScheduleRunFailure(errorMessage446, run, scheduleId, buildLogger);
 
-			case 455:
-				StringBuilder errorMessage455 = new StringBuilder(
-						String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
-				appendLine(errorMessage455, Messages.DATABASE_NOT_RESPONDING);
-				return OnScheduleRunFailure(errorMessage455, run, scheduleId, buildLogger);
+				case 455:
+					StringBuilder errorMessage455 = new StringBuilder(
+							String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(),
+									response.getStatusText()));
+					appendLine(errorMessage455, Messages.DATABASE_NOT_RESPONDING);
+					return OnScheduleRunFailure(errorMessage455, run, scheduleId, buildLogger);
 
-			case 500:
-				StringBuilder errorMessage500 = new StringBuilder(
-						String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
-				appendLine(errorMessage500, Messages.CONTROLLER_RESPONDED_WITH_ERRORS);
-				return OnScheduleRunFailure(errorMessage500, run, scheduleId, buildLogger);
+				case 500:
+					StringBuilder errorMessage500 = new StringBuilder(
+							String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(),
+									response.getStatusText()));
+					appendLine(errorMessage500, Messages.CONTROLLER_RESPONDED_WITH_ERRORS);
+					return OnScheduleRunFailure(errorMessage500, run, scheduleId, buildLogger);
 
-			default:
-				StringBuilder errorMessage = new StringBuilder(
-						String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
-				return OnScheduleRunFailure(errorMessage, run, scheduleId, buildLogger);
+				default:
+					StringBuilder errorMessage = new StringBuilder(
+							String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(),
+									response.getStatusText()));
+					return OnScheduleRunFailure(errorMessage, run, scheduleId, buildLogger);
 			}
-		} catch (ConnectException | UnknownHostException e) {
-			OnScheduleRunConnectionFailure(e, buildLogger);
 		} catch (ExecutionException e) {
 			if (e.getCause() instanceof ConnectException || e.getCause() instanceof UnknownHostException) {
 				OnScheduleRunConnectionFailure(e, buildLogger);
@@ -331,7 +358,6 @@ public final class PluginHandler {
 				throw e;
 		}
 		return null;
-
 	}
 
 	private static UUID OnScheduleRunFailure(StringBuilder errorMessage, LeapworkRun failedRun, UUID scheduleId,
@@ -355,66 +381,85 @@ public final class PluginHandler {
 
 		buildLogger.addErrorLogEntry(String.format(Messages.STOPPING_RUN, scheduleTitle, runId));
 		String uri = String.format(Messages.STOP_RUN_URI, controllerApiHttpAddress, runId.toString());
-		AsyncHttpClient client = new AsyncHttpClient();
+		AsyncHttpClient client = Dsl.asyncHttpClient();
 		try {
 
 			Response response = client.preparePut(uri).setBody("").setHeader("AccessKey", accessKey).execute().get();
 			client.close();
 
 			switch (response.getStatusCode()) {
-			case 200:
-				JsonParser parser = new JsonParser();
-				JsonObject jsonStopRunObject = parser.parse(response.getResponseBody()).getAsJsonObject();
-				JsonElement jsonStopSuccessfull = jsonStopRunObject.get("OperationCompleted");
-				isSuccessfullyStopped = Utils.defaultBooleanIfNull(jsonStopSuccessfull, false);
-				if (isSuccessfullyStopped)
+				case 200:
+					JsonParser parser = new JsonParser();
+					JsonObject jsonStopRunObject = parser.parse(response.getResponseBody()).getAsJsonObject();
+					JsonElement jsonStopSuccessfull = jsonStopRunObject.get("OperationCompleted");
+					isSuccessfullyStopped = Utils.defaultBooleanIfNull(jsonStopSuccessfull, false);
+					if (isSuccessfullyStopped)
+						buildLogger.addErrorLogEntry(
+								String.format(Messages.STOP_RUN_SUCCESS, scheduleTitle, runId.toString()));
+					else
+						buildLogger
+								.addErrorLogEntry(
+										String.format(Messages.STOP_RUN_FAIL, scheduleTitle, runId.toString()));
+					break;
+
+				case 401:
 					buildLogger.addErrorLogEntry(
-							String.format(Messages.STOP_RUN_SUCCESS, scheduleTitle, runId.toString()));
-				else
+							String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(),
+									response.getStatusText()));
+					buildLogger.addErrorLogEntry(Messages.INVALID_ACCESS_KEY);
 					buildLogger
 							.addErrorLogEntry(String.format(Messages.STOP_RUN_FAIL, scheduleTitle, runId.toString()));
-				break;
 
-			case 401:
-				buildLogger.addErrorLogEntry(
-						String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
-				buildLogger.addErrorLogEntry(Messages.INVALID_ACCESS_KEY);
-				buildLogger.addErrorLogEntry(String.format(Messages.STOP_RUN_FAIL, scheduleTitle, runId.toString()));
+				case 404:
+					buildLogger.addErrorLogEntry(
+							String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(),
+									response.getStatusText()));
+					buildLogger.addErrorLogEntry(String.format(Messages.NO_SUCH_RUN_WAS_FOUND, runId, scheduleTitle));
+					buildLogger
+							.addErrorLogEntry(String.format(Messages.STOP_RUN_FAIL, scheduleTitle, runId.toString()));
 
-			case 404:
-				buildLogger.addErrorLogEntry(
-						String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
-				buildLogger.addErrorLogEntry(String.format(Messages.NO_SUCH_RUN_WAS_FOUND, runId, scheduleTitle));
-				buildLogger.addErrorLogEntry(String.format(Messages.STOP_RUN_FAIL, scheduleTitle, runId.toString()));
+				case 446:
+					buildLogger.addErrorLogEntry(
+							String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(),
+									response.getStatusText()));
+					buildLogger.addErrorLogEntry(Messages.NO_DISK_SPACE);
+					buildLogger
+							.addErrorLogEntry(String.format(Messages.STOP_RUN_FAIL, scheduleTitle, runId.toString()));
 
-			case 446:
-				buildLogger.addErrorLogEntry(
-						String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
-				buildLogger.addErrorLogEntry(Messages.NO_DISK_SPACE);
-				buildLogger.addErrorLogEntry(String.format(Messages.STOP_RUN_FAIL, scheduleTitle, runId.toString()));
+				case 455:
+					buildLogger.addErrorLogEntry(
+							String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(),
+									response.getStatusText()));
+					buildLogger.addErrorLogEntry(Messages.DATABASE_NOT_RESPONDING);
+					buildLogger
+							.addErrorLogEntry(String.format(Messages.STOP_RUN_FAIL, scheduleTitle, runId.toString()));
 
-			case 455:
-				buildLogger.addErrorLogEntry(
-						String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
-				buildLogger.addErrorLogEntry(Messages.DATABASE_NOT_RESPONDING);
-				buildLogger.addErrorLogEntry(String.format(Messages.STOP_RUN_FAIL, scheduleTitle, runId.toString()));
-
-			case 500:
-				buildLogger.addErrorLogEntry(
-						String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
-				buildLogger.addErrorLogEntry(Messages.CONTROLLER_RESPONDED_WITH_ERRORS);
-				buildLogger.addErrorLogEntry(String.format(Messages.STOP_RUN_FAIL, scheduleTitle, runId.toString()));
-			default:
-				buildLogger.addErrorLogEntry(
-						String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
-				buildLogger.addErrorLogEntry(String.format(Messages.STOP_RUN_FAIL, scheduleTitle, runId.toString()));
+				case 500:
+					buildLogger.addErrorLogEntry(
+							String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(),
+									response.getStatusText()));
+					buildLogger.addErrorLogEntry(Messages.CONTROLLER_RESPONDED_WITH_ERRORS);
+					buildLogger
+							.addErrorLogEntry(String.format(Messages.STOP_RUN_FAIL, scheduleTitle, runId.toString()));
+				default:
+					buildLogger.addErrorLogEntry(
+							String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(),
+									response.getStatusText()));
+					buildLogger
+							.addErrorLogEntry(String.format(Messages.STOP_RUN_FAIL, scheduleTitle, runId.toString()));
 
 			}
 		} catch (Exception e) {
 			buildLogger.addErrorLogEntry(String.format(Messages.STOP_RUN_FAIL, scheduleTitle, runId.toString()));
 			buildLogger.addErrorLogEntry(e.getMessage());
 		} finally {
-			client.close();
+			if (client != null) {
+				try {
+					client.close();
+				} catch (IOException e) {
+					buildLogger.addErrorLogEntry("Error while closing client: " + e.getMessage());
+				}
+			}
 			return isSuccessfullyStopped;
 		}
 	}
@@ -496,41 +541,41 @@ public final class PluginHandler {
 		Response response = client.prepareGet(uri).setHeader("AccessKey", accessKey).execute().get();
 
 		switch (response.getStatusCode()) {
-		case 200:
-			JsonParser parser = new JsonParser();
-			JsonObject runStatusObject = parser.parse(response.getResponseBody()).getAsJsonObject();
-			JsonElement jsonRunStatus = runStatusObject.get("Status");
-			String runStatus = Utils.defaultStringIfNull(jsonRunStatus, "Queued");
-			return runStatus;
+			case 200:
+				JsonParser parser = new JsonParser();
+				JsonObject runStatusObject = parser.parse(response.getResponseBody()).getAsJsonObject();
+				JsonElement jsonRunStatus = runStatusObject.get("Status");
+				String runStatus = Utils.defaultStringIfNull(jsonRunStatus, "Queued");
+				return runStatus;
 
-		case 401:
-			StringBuilder errorMessage401 = new StringBuilder(
-					String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
-			appendLine(errorMessage401, Messages.INVALID_ACCESS_KEY);
-			throw new Exception(errorMessage401.toString());
+			case 401:
+				StringBuilder errorMessage401 = new StringBuilder(
+						String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
+				appendLine(errorMessage401, Messages.INVALID_ACCESS_KEY);
+				throw new Exception(errorMessage401.toString());
 
-		case 404:
-			StringBuilder errorMessage404 = new StringBuilder(
-					String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
-			appendLine(errorMessage404, String.format(Messages.NO_SUCH_RUN, runId));
-			throw new Exception(errorMessage404.toString());
+			case 404:
+				StringBuilder errorMessage404 = new StringBuilder(
+						String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
+				appendLine(errorMessage404, String.format(Messages.NO_SUCH_RUN, runId));
+				throw new Exception(errorMessage404.toString());
 
-		case 455:
-			StringBuilder errorMessage455 = new StringBuilder(
-					String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
-			appendLine(errorMessage455, Messages.DATABASE_NOT_RESPONDING);
-			throw new Exception(errorMessage455.toString());
+			case 455:
+				StringBuilder errorMessage455 = new StringBuilder(
+						String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
+				appendLine(errorMessage455, Messages.DATABASE_NOT_RESPONDING);
+				throw new Exception(errorMessage455.toString());
 
-		case 500:
-			StringBuilder errorMessage500 = new StringBuilder(
-					String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
-			appendLine(errorMessage500, Messages.CONTROLLER_RESPONDED_WITH_ERRORS);
-			throw new Exception(errorMessage500.toString());
+			case 500:
+				StringBuilder errorMessage500 = new StringBuilder(
+						String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
+				appendLine(errorMessage500, Messages.CONTROLLER_RESPONDED_WITH_ERRORS);
+				throw new Exception(errorMessage500.toString());
 
-		default:
-			String errorMessage = String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(),
-					response.getStatusText());
-			throw new Exception(errorMessage);
+			default:
+				String errorMessage = String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(),
+						response.getStatusText());
+				throw new Exception(errorMessage);
 		}
 
 	}
@@ -542,58 +587,58 @@ public final class PluginHandler {
 		Response response = client.prepareGet(uri).setHeader("AccessKey", accessKey).execute().get();
 
 		switch (response.getStatusCode()) {
-		case 200:
+			case 200:
 
-			JsonParser parser = new JsonParser();
-			JsonObject jsonRunItemsObject = parser.parse(response.getResponseBody()).getAsJsonObject();
-			JsonElement jsonRunItemsElement = jsonRunItemsObject.get("RunItemIds");
+				JsonParser parser = new JsonParser();
+				JsonObject jsonRunItemsObject = parser.parse(response.getResponseBody()).getAsJsonObject();
+				JsonElement jsonRunItemsElement = jsonRunItemsObject.get("RunItemIds");
 
-			List<UUID> runItems = new ArrayList<>();
+				List<UUID> runItems = new ArrayList<>();
 
-			if (jsonRunItemsElement != null) {
-				JsonArray jsonRunItems = jsonRunItemsElement.getAsJsonArray();
-				for (int i = 0; i < jsonRunItems.size(); i++) {
-					UUID runItemId = UUID.fromString(jsonRunItems.get(i).getAsString());
-					runItems.add(runItemId);
+				if (jsonRunItemsElement != null) {
+					JsonArray jsonRunItems = jsonRunItemsElement.getAsJsonArray();
+					for (int i = 0; i < jsonRunItems.size(); i++) {
+						UUID runItemId = UUID.fromString(jsonRunItems.get(i).getAsString());
+						runItems.add(runItemId);
+					}
 				}
-			}
 
-			return runItems;
+				return runItems;
 
-		case 401:
-			StringBuilder errorMessage401 = new StringBuilder(
-					String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
-			appendLine(errorMessage401, Messages.INVALID_ACCESS_KEY);
-			throw new Exception(errorMessage401.toString());
+			case 401:
+				StringBuilder errorMessage401 = new StringBuilder(
+						String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
+				appendLine(errorMessage401, Messages.INVALID_ACCESS_KEY);
+				throw new Exception(errorMessage401.toString());
 
-		case 404:
-			StringBuilder errorMessage404 = new StringBuilder(
-					String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
-			appendLine(errorMessage404, String.format(Messages.NO_SUCH_RUN, runId));
-			throw new Exception(errorMessage404.toString());
+			case 404:
+				StringBuilder errorMessage404 = new StringBuilder(
+						String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
+				appendLine(errorMessage404, String.format(Messages.NO_SUCH_RUN, runId));
+				throw new Exception(errorMessage404.toString());
 
-		case 446:
-			StringBuilder errorMessage446 = new StringBuilder(
-					String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
-			appendLine(errorMessage446, Messages.NO_DISK_SPACE);
-			throw new Exception(errorMessage446.toString());
+			case 446:
+				StringBuilder errorMessage446 = new StringBuilder(
+						String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
+				appendLine(errorMessage446, Messages.NO_DISK_SPACE);
+				throw new Exception(errorMessage446.toString());
 
-		case 455:
-			StringBuilder errorMessage455 = new StringBuilder(
-					String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
-			appendLine(errorMessage455, Messages.DATABASE_NOT_RESPONDING);
-			throw new Exception(errorMessage455.toString());
+			case 455:
+				StringBuilder errorMessage455 = new StringBuilder(
+						String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
+				appendLine(errorMessage455, Messages.DATABASE_NOT_RESPONDING);
+				throw new Exception(errorMessage455.toString());
 
-		case 500:
-			StringBuilder errorMessage500 = new StringBuilder(
-					String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
-			appendLine(errorMessage500, Messages.CONTROLLER_RESPONDED_WITH_ERRORS);
-			throw new Exception(errorMessage500.toString());
+			case 500:
+				StringBuilder errorMessage500 = new StringBuilder(
+						String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
+				appendLine(errorMessage500, Messages.CONTROLLER_RESPONDED_WITH_ERRORS);
+				throw new Exception(errorMessage500.toString());
 
-		default:
-			String errorMessage = String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(),
-					response.getStatusText());
-			throw new Exception(errorMessage);
+			default:
+				String errorMessage = String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(),
+						response.getStatusText());
+				throw new Exception(errorMessage);
 		}
 
 	}
@@ -606,87 +651,90 @@ public final class PluginHandler {
 		Response response = client.prepareGet(uri).setHeader("AccessKey", accessKey).execute().get();
 
 		switch (response.getStatusCode()) {
-		case 200:
+			case 200:
 
-			JsonParser parser = new JsonParser();
-			JsonObject jsonRunItem = parser.parse(response.getResponseBody()).getAsJsonObject();
-			parser = null;
+				JsonParser parser = new JsonParser();
+				JsonObject jsonRunItem = parser.parse(response.getResponseBody()).getAsJsonObject();
+				parser = null;
 
-			// FlowInfo
-			JsonElement jsonFlowInfo = jsonRunItem.get("FlowInfo");
-			JsonObject flowInfo = jsonFlowInfo.getAsJsonObject();
-			JsonElement jsonFlowId = flowInfo.get("FlowId");
-			UUID flowId = Utils.defaultUuidIfNull(jsonFlowId, UUID.randomUUID());
-			JsonElement jsonFlowTitle = flowInfo.get("FlowTitle");
-			String flowTitle = Utils.defaultStringIfNull(jsonFlowTitle);
-			JsonElement jsonFlowStatus = flowInfo.get("Status");
-			String flowStatus = Utils.defaultStringIfNull(jsonFlowStatus, "NoStatus");
+				// FlowInfo
+				JsonElement jsonFlowInfo = jsonRunItem.get("FlowInfo");
+				JsonObject flowInfo = jsonFlowInfo.getAsJsonObject();
+				JsonElement jsonFlowId = flowInfo.get("FlowId");
+				UUID flowId = Utils.defaultUuidIfNull(jsonFlowId, UUID.randomUUID());
+				JsonElement jsonFlowTitle = flowInfo.get("FlowTitle");
+				String flowTitle = Utils.defaultStringIfNull(jsonFlowTitle);
+				JsonElement jsonFlowStatus = flowInfo.get("Status");
+				String flowStatus = Utils.defaultStringIfNull(jsonFlowStatus, "NoStatus");
 
-			// AgentInfo
-			JsonElement jsonEnvironmentInfo = jsonRunItem.get("AgentInfo");
-			JsonObject environmentInfo = jsonEnvironmentInfo.getAsJsonObject();
-			JsonElement jsonEnvironmentId = environmentInfo.get("AgentId");
-			UUID environmentId = Utils.defaultUuidIfNull(jsonEnvironmentId, UUID.randomUUID());
-			JsonElement jsonEnvironmentTitle = environmentInfo.get("AgentTitle");
-			String environmentTitle = Utils.defaultStringIfNull(jsonEnvironmentTitle);
-			JsonElement jsonEnvironmentConnectionType = environmentInfo.get("ConnectionType");
-			String environmentConnectionType = Utils.defaultStringIfNull(jsonEnvironmentConnectionType, "Not defined");
+				// AgentInfo
+				JsonElement jsonEnvironmentInfo = jsonRunItem.get("AgentInfo");
+				JsonObject environmentInfo = jsonEnvironmentInfo.getAsJsonObject();
+				JsonElement jsonEnvironmentId = environmentInfo.get("AgentId");
+				UUID environmentId = Utils.defaultUuidIfNull(jsonEnvironmentId, UUID.randomUUID());
+				JsonElement jsonEnvironmentTitle = environmentInfo.get("AgentTitle");
+				String environmentTitle = Utils.defaultStringIfNull(jsonEnvironmentTitle);
+				JsonElement jsonEnvironmentConnectionType = environmentInfo.get("ConnectionType");
+				String environmentConnectionType = Utils.defaultStringIfNull(jsonEnvironmentConnectionType,
+						"Not defined");
 
-			JsonElement jsonRunId = jsonRunItem.get("AutomationRunId");
-			UUID runId = Utils.defaultUuidIfNull(jsonRunId, UUID.randomUUID());
+				JsonElement jsonRunId = jsonRunItem.get("AutomationRunId");
+				UUID runId = Utils.defaultUuidIfNull(jsonRunId, UUID.randomUUID());
 
-			String elapsed = Utils.defaultElapsedIfNull(jsonRunItem.get("Elapsed"));
-			double milliseconds = Utils.defaultDoubleIfNull(jsonRunItem.get("ElapsedMilliseconds"), 0);
+				String elapsed = Utils.defaultElapsedIfNull(jsonRunItem.get("Elapsed"));
+				double milliseconds = Utils.defaultDoubleIfNull(jsonRunItem.get("ElapsedMilliseconds"), 0);
 
-			RunItem runItem = new RunItem(flowTitle, flowStatus, milliseconds, scheduleTitle);
+				RunItem runItem = new RunItem(flowTitle, flowStatus, milliseconds, scheduleTitle);
 
-			if (flowStatus.contentEquals("Initializing") || flowStatus.contentEquals("Connecting")
-					|| flowStatus.contentEquals("Connected") || flowStatus.contentEquals("Running")
-					|| flowStatus.contentEquals("IsProcessing") || flowStatus.contentEquals("NoStatus")
-					|| (flowStatus.contentEquals("Passed") && !writePassedKeyframes)
-					|| (flowStatus.contentEquals("Done") && doneStatusAsSuccess && !writePassedKeyframes)) {
-				return runItem;
-			} else {
-				Failure keyframes = getRunItemKeyFrames(client, controllerApiHttpAddress, accessKey, runItemId, runItem,
-						scheduleTitle, environmentTitle, buildLogger);
-				runItem.failure = keyframes;
-				return runItem;
-			}
+				if (flowStatus.contentEquals("Initializing") || flowStatus.contentEquals("Connecting")
+						|| flowStatus.contentEquals("Connected") || flowStatus.contentEquals("Running")
+						|| flowStatus.contentEquals("IsProcessing") || flowStatus.contentEquals("NoStatus")
+						|| (flowStatus.contentEquals("Passed") && !writePassedKeyframes)
+						|| (flowStatus.contentEquals("Done") && doneStatusAsSuccess && !writePassedKeyframes)) {
+					return runItem;
+				} else {
+					Failure keyframes = getRunItemKeyFrames(client, controllerApiHttpAddress, accessKey, runItemId,
+							runItem,
+							scheduleTitle, environmentTitle, buildLogger);
+					runItem.failure = keyframes;
+					return runItem;
+				}
 
-		case 401:
-			StringBuilder errorMessage401 = new StringBuilder(
-					String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
-			appendLine(errorMessage401, Messages.INVALID_ACCESS_KEY);
-			throw new Exception(errorMessage401.toString());
+			case 401:
+				StringBuilder errorMessage401 = new StringBuilder(
+						String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
+				appendLine(errorMessage401, Messages.INVALID_ACCESS_KEY);
+				throw new Exception(errorMessage401.toString());
 
-		case 404:
-			StringBuilder errorMessage404 = new StringBuilder(
-					String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
-			appendLine(errorMessage404, String.format(Messages.NO_SUCH_RUN_ITEM_WAS_FOUND, runItemId, scheduleTitle));
-			throw new Exception(errorMessage404.toString());
+			case 404:
+				StringBuilder errorMessage404 = new StringBuilder(
+						String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
+				appendLine(errorMessage404,
+						String.format(Messages.NO_SUCH_RUN_ITEM_WAS_FOUND, runItemId, scheduleTitle));
+				throw new Exception(errorMessage404.toString());
 
-		case 446:
-			StringBuilder errorMessage446 = new StringBuilder(
-					String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
-			appendLine(errorMessage446, Messages.NO_DISK_SPACE);
-			throw new Exception(errorMessage446.toString());
+			case 446:
+				StringBuilder errorMessage446 = new StringBuilder(
+						String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
+				appendLine(errorMessage446, Messages.NO_DISK_SPACE);
+				throw new Exception(errorMessage446.toString());
 
-		case 455:
-			StringBuilder errorMessage455 = new StringBuilder(
-					String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
-			appendLine(errorMessage455, Messages.DATABASE_NOT_RESPONDING);
-			throw new Exception(errorMessage455.toString());
+			case 455:
+				StringBuilder errorMessage455 = new StringBuilder(
+						String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
+				appendLine(errorMessage455, Messages.DATABASE_NOT_RESPONDING);
+				throw new Exception(errorMessage455.toString());
 
-		case 500:
-			StringBuilder errorMessage500 = new StringBuilder(
-					String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
-			appendLine(errorMessage500, Messages.CONTROLLER_RESPONDED_WITH_ERRORS);
-			throw new Exception(errorMessage500.toString());
+			case 500:
+				StringBuilder errorMessage500 = new StringBuilder(
+						String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
+				appendLine(errorMessage500, Messages.CONTROLLER_RESPONDED_WITH_ERRORS);
+				throw new Exception(errorMessage500.toString());
 
-		default:
-			String errorMessage = String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(),
-					response.getStatusText());
-			throw new Exception(errorMessage);
+			default:
+				String errorMessage = String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(),
+						response.getStatusText());
+				throw new Exception(errorMessage);
 		}
 	}
 
@@ -697,72 +745,73 @@ public final class PluginHandler {
 		Response response = client.prepareGet(uri).setHeader("AccessKey", accessKey).execute().get();
 
 		switch (response.getStatusCode()) {
-		case 200:
-			JsonArray jsonKeyframes = TryParseKeyframeJson(response.getResponseBody(), buildLogger);
+			case 200:
+				JsonArray jsonKeyframes = TryParseKeyframeJson(response.getResponseBody(), buildLogger);
 
-			if (jsonKeyframes != null) {
-				buildLogger.addBuildLogEntry(Messages.CASE_CONSOLE_LOG_SEPARATOR);
-				buildLogger.addBuildLogEntry(String.format(Messages.CASE_INFORMATION, runItem.getCaseName(),
-						runItem.getCaseStatus(), runItem.getElapsedTime()));
-				StringBuilder fullKeyframes = new StringBuilder("");
+				if (jsonKeyframes != null) {
+					buildLogger.addBuildLogEntry(Messages.CASE_CONSOLE_LOG_SEPARATOR);
+					buildLogger.addBuildLogEntry(String.format(Messages.CASE_INFORMATION, runItem.getCaseName(),
+							runItem.getCaseStatus(), runItem.getElapsedTime()));
+					StringBuilder fullKeyframes = new StringBuilder("");
 
-				for (JsonElement jsonKeyFrame : jsonKeyframes) {
-					String level = Utils.defaultStringIfNull(jsonKeyFrame.getAsJsonObject().get("Level"), "Trace");
-					if (!level.contentEquals("") && !level.contentEquals("Trace")) {
-						String keyFrameTimeStamp = jsonKeyFrame.getAsJsonObject().get("Timestamp").getAsJsonObject()
-								.get("Value").getAsString();
-						String keyFrameLogMessage = jsonKeyFrame.getAsJsonObject().get("LogMessage").getAsString();
-						String keyFrame = String.format(Messages.CASE_STACKTRACE_FORMAT, keyFrameTimeStamp,
-								keyFrameLogMessage);
-						buildLogger.addBuildLogEntry(keyFrame);
-						fullKeyframes.append(keyFrame);
-						fullKeyframes.append("&#xA;");
+					for (JsonElement jsonKeyFrame : jsonKeyframes) {
+						String level = Utils.defaultStringIfNull(jsonKeyFrame.getAsJsonObject().get("Level"), "Trace");
+						if (!level.contentEquals("") && !level.contentEquals("Trace")) {
+							String keyFrameTimeStamp = jsonKeyFrame.getAsJsonObject().get("Timestamp").getAsJsonObject()
+									.get("Value").getAsString();
+							String keyFrameLogMessage = jsonKeyFrame.getAsJsonObject().get("LogMessage").getAsString();
+							String keyFrame = String.format(Messages.CASE_STACKTRACE_FORMAT, keyFrameTimeStamp,
+									keyFrameLogMessage);
+							buildLogger.addBuildLogEntry(keyFrame);
+							fullKeyframes.append(keyFrame);
+							fullKeyframes.append("&#xA;");
+						}
 					}
+
+					fullKeyframes.append("Environment: ").append(environmentTitle).append("&#xA;");
+					fullKeyframes.append("Schedule: ").append(scheduleTitle);
+					buildLogger.addBuildLogEntry("Environment: " + environmentTitle);
+					buildLogger.addBuildLogEntry("Schedule: " + scheduleTitle);
+
+					return new Failure(fullKeyframes.toString());
+				} else {
+					buildLogger.addBuildLogEntry(String.format(Messages.FAILED_TO_PARSE_RESPONSE_KEYFRAME_JSON_ARRAY));
+					return new Failure(Messages.FAILED_TO_PARSE_RESPONSE_KEYFRAME_JSON_ARRAY);
 				}
+			case 401:
+				buildLogger.addErrorLogEntry(
+						String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
+				buildLogger.addErrorLogEntry(Messages.INVALID_ACCESS_KEY);
+				break;
+			case 404:
+				buildLogger.addErrorLogEntry(
+						String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
+				buildLogger
+						.addErrorLogEntry(String.format(Messages.NO_SUCH_RUN_ITEM_WAS_FOUND, runItemId, scheduleTitle));
+				break;
 
-				fullKeyframes.append("Environment: ").append(environmentTitle).append("&#xA;");
-				fullKeyframes.append("Schedule: ").append(scheduleTitle);
-				buildLogger.addBuildLogEntry("Environment: " + environmentTitle);
-				buildLogger.addBuildLogEntry("Schedule: " + scheduleTitle);
+			case 446:
+				buildLogger.addErrorLogEntry(
+						String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
+				buildLogger.addErrorLogEntry(Messages.NO_DISK_SPACE);
+				break;
 
-				return new Failure(fullKeyframes.toString());
-			} else {
-				buildLogger.addBuildLogEntry(String.format(Messages.FAILED_TO_PARSE_RESPONSE_KEYFRAME_JSON_ARRAY));
-				return new Failure(Messages.FAILED_TO_PARSE_RESPONSE_KEYFRAME_JSON_ARRAY);
-			}
-		case 401:
-			buildLogger.addErrorLogEntry(
-					String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
-			buildLogger.addErrorLogEntry(Messages.INVALID_ACCESS_KEY);
-			break;
-		case 404:
-			buildLogger.addErrorLogEntry(
-					String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
-			buildLogger.addErrorLogEntry(String.format(Messages.NO_SUCH_RUN_ITEM_WAS_FOUND, runItemId, scheduleTitle));
-			break;
+			case 455:
+				buildLogger.addErrorLogEntry(
+						String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
+				buildLogger.addErrorLogEntry(Messages.DATABASE_NOT_RESPONDING);
+				break;
 
-		case 446:
-			buildLogger.addErrorLogEntry(
-					String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
-			buildLogger.addErrorLogEntry(Messages.NO_DISK_SPACE);
-			break;
+			case 500:
+				buildLogger.addErrorLogEntry(
+						String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
+				buildLogger.addErrorLogEntry(Messages.CONTROLLER_RESPONDED_WITH_ERRORS);
+				break;
 
-		case 455:
-			buildLogger.addErrorLogEntry(
-					String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
-			buildLogger.addErrorLogEntry(Messages.DATABASE_NOT_RESPONDING);
-			break;
-
-		case 500:
-			buildLogger.addErrorLogEntry(
-					String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
-			buildLogger.addErrorLogEntry(Messages.CONTROLLER_RESPONDED_WITH_ERRORS);
-			break;
-
-		default:
-			buildLogger.addErrorLogEntry(
-					String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
-			break;
+			default:
+				buildLogger.addErrorLogEntry(
+						String.format(Messages.ERROR_CODE_MESSAGE, response.getStatusCode(), response.getStatusText()));
+				break;
 		}
 		return null;
 	}

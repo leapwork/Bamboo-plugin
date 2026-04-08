@@ -7,25 +7,22 @@
         <param name="plugin-logo">images/pluginLogo.png</param>
 		<param name="vendor-logo">images/vendorLogo.png</param>
         <param name="vendor-icon">images/vendorIcon.png</param>
+        <param name="atlassian-data-center-status">compatible</param>
+        <param name="atlassian-data-center-compatible">true</param>
+        <param name="plugin-type">data-center</param>
     </plugin-info>
 
     <!-- add our i18n resource -->
     <resource type="i18n" name="i18n" location="leapwork-integration-for-bamboo"/>
     
     <!-- add our web resources -->
-    <taskType key="LeapworkBambooBridgeTask" name="Leapwork"
-				  class="com.leapwork.leapwork_integration_for_bamboo.impl.LeapworkBambooBridgeTask">>
-       <description>Choose Schedules, Run and Get result
-        </description>
+    <taskType key="LeapworkBambooBridgeTask" name="Leapwork" class="com.leapwork.leapwork_integration_for_bamboo.impl.LeapworkBambooBridgeTask">
+       <description>Choose Schedules, Run and Get result</description>
         <category name="builder" />
         <category name="test" />
-        <configuration
-                class="com.leapwork.leapwork_integration_for_bamboo.impl.LeapworkBambooBridgeTaskConfigurator" />
-        <resource type="freemarker" name="edit"
-                  location="editLeapworkBambooBridgeTask.ftl" />
-        <resource type="freemarker" name="view"
-                  location="viewLeapworkBambooBridgeTask.ftl" />
+        <configuration class="com.leapwork.leapwork_integration_for_bamboo.impl.LeapworkBambooBridgeTaskConfigurator" />
+        <resource type="freemarker" name="edit" location="editLeapworkBambooBridgeTask.ftl" />
+        <resource type="freemarker" name="view" location="viewLeapworkBambooBridgeTask.ftl" />
         <resource type="download" name="icon" location="images/vendorLogo.png" />
     </taskType>
-
 </atlassian-plugin>

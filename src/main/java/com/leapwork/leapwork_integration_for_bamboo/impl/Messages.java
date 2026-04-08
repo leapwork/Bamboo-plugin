@@ -84,6 +84,7 @@ public final class Messages {
     public static final String INPUT_VALUES_MESSAGE = "LeapWork Plugin input parameters:";
     public static final String INPUT_HOSTNAME_VALUE = "LEAPWORK controller hostname: %1$s";
     public static final String INPUT_PORT_VALUE = "LEAPWORK controller port: %1$s";
+    public static final String INPUT_HTTPS = "Leapwork Https port is enabled: %1$s";
     public static final String INPUT_REPORT_VALUE = "JUnit report file name: %1$s";
     public static final String INPUT_SCHEDULE_NAMES_VALUE = "Schedule names: ";
     public static final String INPUT_SCHEDULE_IDS_VALUE = "Schedule ids: ";

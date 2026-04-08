@@ -4,9 +4,7 @@ import com.atlassian.bamboo.collections.ActionParametersMap;
 import com.atlassian.bamboo.task.AbstractTaskConfigurator;
 import com.atlassian.bamboo.task.TaskDefinition;
 import com.atlassian.bamboo.util.TextProviderUtils;
-import com.atlassian.util.concurrent.NotNull;
-
-
+import org.jetbrains.annotations.NotNull; //import com.atlassian.util.concurrent.NotNull;
 import java.util.ArrayList;
 import java.util.Map;
 
@@ -20,6 +18,7 @@ public class LeapworkBambooBridgeTaskConfigurator extends AbstractTaskConfigurat
         final Map<String, String> config = super.generateTaskConfigMap(params, previousTaskDefinition);
 
         config.put("leapworkHostname", params.getString("leapworkHostname"));
+        config.put("leapworkHttps", Boolean.toString(params.getBoolean("leapworkHttps")));
         config.put("leapworkPort", params.getString("leapworkPort"));
         config.put("leapworkAccessKey", params.getString("leapworkAccessKey"));
         config.put("leapworkDelay", params.getString("leapworkDelay"));
@@ -58,6 +57,7 @@ public class LeapworkBambooBridgeTaskConfigurator extends AbstractTaskConfigurat
 
         Map<String, String> config = taskDefinition.getConfiguration();
         context.put("leapworkHostname", config.get("leapworkHostname"));
+        context.put("leapworkHttps", Boolean.valueOf(config.get("leapworkHttps")));
         context.put("leapworkPort",config.get("leapworkPort"));
         context.put("leapworkAccessKey", config.get("leapworkAccessKey"));
         context.put("leapworkDelay", config.get("leapworkDelay"));
