@@ -8,11 +8,8 @@ import com.atlassian.bamboo.build.test.junit.JunitTestReportCollector;
 import com.atlassian.bamboo.task.*;
 import com.atlassian.plugin.spring.scanner.annotation.component.Scanned;
 import com.atlassian.plugin.spring.scanner.annotation.imports.ComponentImport;
-import org.asynchttpclient.AsyncHttpClient;
-import org.asynchttpclient.Dsl;
 import org.springframework.beans.factory.annotation.Autowired;
 import java.io.File;
-import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -78,10 +75,9 @@ public class LeapworkBambooBridgeTask implements TaskType {
 		String scheduleVariablesRequestPart = pluginHandler.getScheduleVariablesRequestPart(leapworkScheduleVariables,
 				buildLogger);
 
-		AsyncHttpClient mainClient = Dsl.asyncHttpClient();
 		try {
 			// Get schedule titles (or/and ids in case of pipeline)
-			LinkedHashMap<UUID, String> schedulesIdTitleHashMap = pluginHandler.getSchedulesIdTitleHashMap(mainClient,
+			LinkedHashMap<UUID, String> schedulesIdTitleHashMap = pluginHandler.getSchedulesIdTitleHashMap(
 					leapworkAccessKey, controllerApiHttpAddress, rawScheduleList, buildLogger, invalidSchedules);
 			rawScheduleList.clear();// don't need that anymore
 
@@ -99,8 +95,8 @@ public class LeapworkBambooBridgeTask implements TaskType {
 				String schTitle = schedulesIdTitleHashMap.get(schId);
 				LeapworkRun run = new LeapworkRun(schId.toString(), schTitle);
 
-				UUID runId = pluginHandler.runSchedule(mainClient, controllerApiHttpAddress, leapworkAccessKey, schId,
-						schTitle, buildLogger, run, scheduleVariablesRequestPart);
+				UUID runId = pluginHandler.runSchedule(controllerApiHttpAddress, leapworkAccessKey, schId, schTitle,
+						buildLogger, run, scheduleVariablesRequestPart);
 				if (runId != null) {
 					resultsMap.put(runId, run);
 					CollectScheduleRunResults(controllerApiHttpAddress, leapworkAccessKey, runId, schTitle, timeDelay,
@@ -186,11 +182,6 @@ public class LeapworkBambooBridgeTask implements TaskType {
 			buildLogger.addErrorLogEntry("FAILURE");
 			result = taskResultBuilder.failedWithError().build();
 		} finally {
-			try {
-				mainClient.close();
-			} catch (IOException closeException) {
-				buildLogger.addErrorLogEntry("Error closing HTTP client: " + closeException.getMessage());
-			}
 			return result;
 		}
 	}
@@ -201,8 +192,6 @@ public class LeapworkBambooBridgeTask implements TaskType {
 			throws InterruptedException {
 		List<UUID> runItemsId = new ArrayList<>();
 		Object waiter = new Object();
-		// get statuses
-		AsyncHttpClient client = Dsl.asyncHttpClient();
 		try {
 			boolean isStillRunning = true;
 
@@ -212,13 +201,12 @@ public class LeapworkBambooBridgeTask implements TaskType {
 					waiter.wait(timeDelay * 1000);// Time delay
 				}
 
-				List<UUID> executedRunItems = pluginHandler.getRunRunItems(client, controllerApiHttpAddress, accessKey,
-						runId);
+				List<UUID> executedRunItems = pluginHandler.getRunRunItems(controllerApiHttpAddress, accessKey, runId);
 				executedRunItems.removeAll(runItemsId); // left only new
 
 				for (ListIterator<UUID> iter = executedRunItems.listIterator(); iter.hasNext();) {
 					UUID runItemId = iter.next();
-					RunItem runItem = pluginHandler.getRunItem(client, controllerApiHttpAddress, accessKey, runItemId,
+					RunItem runItem = pluginHandler.getRunItem(controllerApiHttpAddress, accessKey, runItemId,
 							scheduleName, isDoneStatusAsSuccess, writePassedKeyframes, buildLogger);
 
 					String status = runItem.getCaseStatus();
@@ -276,10 +264,10 @@ public class LeapworkBambooBridgeTask implements TaskType {
 
 				runItemsId.addAll(executedRunItems);
 
-				String runStatus = pluginHandler.getRunStatus(client, controllerApiHttpAddress, accessKey, runId);
+				String runStatus = pluginHandler.getRunStatus(controllerApiHttpAddress, accessKey, runId);
 				if (runStatus.contentEquals("Finished")) {
-					List<UUID> allExecutedRunItems = pluginHandler.getRunRunItems(client, controllerApiHttpAddress,
-							accessKey, runId);
+					List<UUID> allExecutedRunItems = pluginHandler.getRunRunItems(controllerApiHttpAddress, accessKey,
+							runId);
 					if (allExecutedRunItems.size() > 0 && allExecutedRunItems.size() <= runItemsId.size())// todo ==
 						isStillRunning = false;
 				}
@@ -308,14 +296,6 @@ public class LeapworkBambooBridgeTask implements TaskType {
 			RunItem invalidItem = new RunItem("Invalid run", "Error", 0, e.getMessage(), scheduleName);
 			resultRun.incErrors();
 			resultRun.runItems.add(invalidItem);
-		} finally {
-			if (client != null) {
-				try {
-					client.close();
-				} catch (IOException e) {
-					buildLogger.addErrorLogEntry("Error while closing client: " + e.getMessage());
-				}
-			}
 		}
 	}
 

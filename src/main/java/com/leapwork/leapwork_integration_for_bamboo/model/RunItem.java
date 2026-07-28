@@ -1,10 +1,5 @@
 package com.leapwork.leapwork_integration_for_bamboo.model;
 
-import javax.xml.bind.annotation.XmlAttribute;
-import javax.xml.bind.annotation.XmlElement;
-import javax.xml.bind.annotation.XmlRootElement;
-
-@XmlRootElement(name = "testcase")
 public class RunItem
 {
 
@@ -15,7 +10,6 @@ public class RunItem
     private double elapsedTime ;
 
     private String classname;
-    @XmlElement
     public Failure failure;
     public RunItem() { }
 
@@ -37,19 +31,15 @@ public class RunItem
         classname = schedule;
     }
 
-    @XmlAttribute(name = "name")
     public String getCaseName()                  { return  caseName; }
     public void   setCaseName(String name)       { caseName = name; }
 
-    @XmlAttribute(name = "status")
     public String getCaseStatus()                { return  caseStatus;}
     public void   setCaseStatus(String status)    { caseStatus = status; }
 
-    @XmlAttribute(name = "time")
     public double getElapsedTime()               { return elapsedTime; }
     public void   setElapsedTime(double time)    { elapsedTime = time; }
 
-    @XmlAttribute(name = "classname")
     public String getClassname()                 { return classname; }
     public void   setClassname(String classname) { this.classname = classname; }
 }
