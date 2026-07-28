@@ -5,7 +5,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.leapwork</groupId>
     <artifactId>leapwork-integration-for-bamboo</artifactId>
-    <version>5.0.2-SNAPSHOT</version>
+    <version>6.0.0-SNAPSHOT</version>
 
     <organization>
         <name>Leapwork</name>
@@ -17,9 +17,9 @@
     <packaging>atlassian-plugin</packaging>
 
     <properties>
-        <bamboo.version>10.0.0</bamboo.version>
-        <bamboo.data.version>10.0.0</bamboo.data.version>
-        <amps.version>8.1.2</amps.version>
+        <bamboo.version>12.1.9</bamboo.version>
+        <bamboo.data.version>12.1.9</bamboo.data.version>
+        <amps.version>9.12.1</amps.version>
         <plugin.testrunner.version>2.0.2</plugin.testrunner.version>
         <atlassian.spring.scanner.version>1.2.13</atlassian.spring.scanner.version>
         <osgi.javaconfig.version>0.2.0</osgi.javaconfig.version>
@@ -38,6 +38,10 @@
                 <enabled>true</enabled>
             </snapshots>
         </repository>
+        <repository>
+            <id>terracotta</id>
+            <url>https://repo.terracotta.org/maven2/</url>
+        </repository>
     </repositories>
 
     <pluginRepositories>
@@ -46,6 +50,32 @@
             <url>https://maven.atlassian.com/repository/public</url>
         </pluginRepository>
     </pluginRepositories>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- Force legacy JAXB transitives onto versions available from HTTPS repositories. -->
+            <dependency>
+                <groupId>javax.xml.bind</groupId>
+                <artifactId>jaxb-api</artifactId>
+                <version>2.3.1</version>
+            </dependency>
+            <dependency>
+                <groupId>org.glassfish.jaxb</groupId>
+                <artifactId>jaxb-runtime</artifactId>
+                <version>2.3.9</version>
+            </dependency>
+            <dependency>
+                <groupId>com.sun.istack</groupId>
+                <artifactId>istack-commons-runtime</artifactId>
+                <version>3.0.12</version>
+            </dependency>
+            <dependency>
+                <groupId>com.sun.xml.fastinfoset</groupId>
+                <artifactId>FastInfoset</artifactId>
+                <version>1.2.16</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <dependency>
@@ -70,17 +100,20 @@
         </dependency>
 
         <dependency>
+            <groupId>javax.xml.bind</groupId>
+            <artifactId>jaxb-api</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.glassfish.jaxb</groupId>
+            <artifactId>jaxb-runtime</artifactId>
+        </dependency>
+
+        <dependency>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
             <version>4.10</version>
             <scope>test</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>com.atlassian.sal</groupId>
-            <artifactId>sal-api</artifactId>
-            <version>3.0.8</version>
-            <scope>provided</scope>            <!-- Uses the application's SAL instead of bundling it into the plugin. -->
         </dependency>
 
         <!-- WIRED TEST RUNNER DEPENDENCIES -->
@@ -89,12 +122,6 @@
             <artifactId>atlassian-plugins-osgi-testrunner</artifactId>
             <version>${plugin.testrunner.version}</version>
             <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>javax.ws.rs</groupId>
-            <artifactId>jsr311-api</artifactId>
-            <version>1.1.1</version>
-            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>com.google.code.gson</groupId>
@@ -138,7 +165,7 @@
         <dependency>
             <groupId>com.atlassian.bamboo.plugins.testresultparser</groupId>
             <artifactId>atlassian-bamboo-plugin-testresultparser</artifactId>
-            <version>6.6.3</version>
+            <version>${bamboo.version}</version>
             <scope>provided</scope>
         </dependency>
 
@@ -162,10 +189,13 @@
                     <instructions>
                         <Atlassian-Plugin-Key>${atlassian.plugin.key}</Atlassian-Plugin-Key>
 
-                        <Export-Package>*</Export-Package>
+                        <Export-Package>
+                            com.leapwork.leapwork_integration_for_bamboo.*
+                        </Export-Package>
 
                         <!-- Add package import here -->
-                        <Import-Package>  
+                        <Import-Package>
+                            !com.aayushatharva.brotli4j.*,
                             com.google.*;resolution:="optional", 
                             com.sun.org.apache.*;resolution:="optional", 
                             com.atlassian.*;resolution:="optional", 
@@ -207,10 +237,47 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.8.0</version>
+                <dependencies>
+                    <dependency>
+                        <groupId>jakarta.xml.bind</groupId>
+                        <artifactId>jakarta.xml.bind-api</artifactId>
+                        <version>4.0.2</version>
+                    </dependency>
+                </dependencies>
                 <configuration>
                     <source>1.8</source>
                     <target>1.8</target>
                 </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>3.1.0</version>
+                <executions>
+                    <execution>
+                        <id>strip-brotli-classes</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <property name="plugin.jar" value="${project.build.directory}/${project.build.finalName}.jar" />
+                                <property name="plugin.unpack.dir" value="${project.build.directory}/plugin-jar-unpacked" />
+                                <delete dir="${plugin.unpack.dir}" />
+                                <mkdir dir="${plugin.unpack.dir}" />
+                                <unzip src="${plugin.jar}" dest="${plugin.unpack.dir}" />
+                                <delete>
+                                    <fileset dir="${plugin.unpack.dir}">
+                                        <include name="io/netty/handler/codec/compression/Brotli*.class" />
+                                    </fileset>
+                                </delete>
+                                <jar destfile="${plugin.jar}" basedir="${plugin.unpack.dir}" />
+                                <delete dir="${plugin.unpack.dir}" />
+                            </target>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>
