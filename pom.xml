@@ -5,7 +5,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.leapwork</groupId>
     <artifactId>leapwork-integration-for-bamboo</artifactId>
-    <version>6.0.0-SNAPSHOT</version>
+    <version>6.0.1-SNAPSHOT</version>
 
     <organization>
         <name>Leapwork</name>
@@ -141,7 +141,7 @@
                         <Atlassian-Plugin-Key>${atlassian.plugin.key}</Atlassian-Plugin-Key>
 
                         <Export-Package>
-                            com.leapwork.leapwork_integration_for_bamboo.*
+                            com.leapwork.leapwork_integration_for_bamboo.*;version="${project.version}"
                         </Export-Package>
 
                         <!-- Add package import here -->
